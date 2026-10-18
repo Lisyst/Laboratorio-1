@@ -2,9 +2,10 @@
 
 import { Router } from 'express';
 
-import { TodoDatasourceImpl, TodoRepositoryImpl } from '../infraestructure';
+import { TodoDatasourceImpl, TodoRepositoryImpl, TodoCompletedLogger, TodoCompletedNotifier } from '../infraestructure';
 import { TodoController } from './controller';
 import { AuthDatasourceImpl, AuthMiddleware, AuthRepositoryImpl } from '../../auth';
+import { TodoCompletedEvent } from '../domain';
 
 export class TodoRoutes {
 	static get routes(): Router {
@@ -13,7 +14,13 @@ export class TodoRoutes {
 		//* This datasource can be change
 		const datasource = new TodoDatasourceImpl();
 		const repository = new TodoRepositoryImpl(datasource);
-		const controller = new TodoController(repository);
+
+		const todoCompletedEvent = new TodoCompletedEvent();
+
+		todoCompletedEvent.subscribe(new TodoCompletedLogger());
+		todoCompletedEvent.subscribe(new TodoCompletedNotifier());
+
+		const controller = new TodoController(repository, todoCompletedEvent);
 
 		// * Authentication middleware
 		const authDatasource = new AuthDatasourceImpl();
