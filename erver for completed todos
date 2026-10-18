@@ -1,0 +1,268 @@
+[1mdiff --git a/src/features/todos/domain/index.ts b/src/features/todos/domain/index.ts[m
+[1mindex 56c3386..c7bf8f4 100644[m
+[1m--- a/src/features/todos/domain/index.ts[m
+[1m+++ b/src/features/todos/domain/index.ts[m
+[36m@@ -3,3 +3,4 @@[m [mexport * from './dtos';[m
+ export * from './entities';[m
+ export * from './repositories/respository';[m
+ export * from './usecases';[m
+[32m+[m[32mexport * from './observers';[m
+\ No newline at end of file[m
+[1mdiff --git a/src/features/todos/domain/usecases/update.usecase.test.ts b/src/features/todos/domain/usecases/update.usecase.test.ts[m
+[1mindex 4fb4f76..c566242 100644[m
+[1m--- a/src/features/todos/domain/usecases/update.usecase.test.ts[m
+[1m+++ b/src/features/todos/domain/usecases/update.usecase.test.ts[m
+[36m@@ -1,11 +1,14 @@[m
+ import { UpdateTodoDto } from '../dtos';[m
+ import { TodoEntity } from '../entities';[m
+[32m+[m[32mimport { TodoCompletedEvent, TodoCompletedObserver } from '../observers';[m
+ import { TodoRepository } from '../repositories/respository';[m
+ import { UpdateTodo, UpdateTodoUseCase } from './update.usecase';[m
+ [m
+ describe('tests in update.usecase.ts', () => {[m
+ 	let repository: jest.Mocked<TodoRepository>;[m
+ 	let updateTodoUseCase: UpdateTodoUseCase;[m
+[32m+[m	[32mlet todoCompletedEvent: TodoCompletedEvent;[m
+[32m+[m	[32mlet observer: jest.Mocked<TodoCompletedObserver>;[m
+ [m
+ 	beforeEach(() => {[m
+ 		repository = {[m
+[36m@@ -16,27 +19,116 @@[m [mdescribe('tests in update.usecase.ts', () => {[m
+ 			delete: jest.fn()[m
+ 		} as jest.Mocked<TodoRepository>;[m
+ [m
+[31m-		updateTodoUseCase = new UpdateTodo(repository);[m
+[32m+[m		[32mobserver = {[m
+[32m+[m			[32mupdate: jest.fn()[m
+[32m+[m		[32m};[m
+[32m+[m
+[32m+[m		[32mtodoCompletedEvent = new TodoCompletedEvent();[m
+[32m+[m		[32mtodoCompletedEvent.subscribe(observer);[m
+[32m+[m
+[32m+[m		[32mupdateTodoUseCase = new UpdateTodo(repository, todoCompletedEvent);[m
+ 	});[m
+ [m
+ 	test('should update a todo item successfully', async () => {[m
+[31m-		const updateData = UpdateTodoDto.create({ id: 1, text: 'Test Todo updated' });[m
+[31m-		const updatedTodo: TodoEntity = { id: 1, text: 'Test Todo updated', isCompleted: false };[m
+[32m+[m		[32mconst updateData = UpdateTodoDto.create({[m
+[32m+[m			[32mid: 1,[m
+[32m+[m			[32mtext: 'Test Todo updated'[m
+[32m+[m		[32m});[m
+ [m
+[32m+[m		[32mconst previousTodo = new TodoEntity(1, 'Test Todo', false);[m
+[32m+[m		[32mconst updatedTodo = new TodoEntity(1, 'Test Todo updated', false);[m
+[32m+[m
+[32m+[m		[32mrepository.getById.mockResolvedValue(previousTodo);[m
+ 		repository.update.mockResolvedValue(updatedTodo);[m
+ [m
+ 		const result = await updateTodoUseCase.execute(updateData);[m
+ [m
+[32m+[m		[32mexpect(repository.getById).toHaveBeenCalled();[m
+ 		expect(repository.update).toHaveBeenCalledWith(updateData);[m
+ 		expect(result).toEqual(updatedTodo);[m
+ 	});[m
+ [m
+[32m+[m	[32mtest('should notify observers when todo changes from incomplete to completed', async () => {[m
+[32m+[m		[32mconst updateData = UpdateTodoDto.create({[m
+[32m+[m			[32mid: 1,[m
+[32m+[m			[32misCompleted: true[m
+[32m+[m		[32m});[m
+[32m+[m
+[32m+[m		[32mconst previousTodo = new TodoEntity(1, 'Test Todo', false);[m
+[32m+[m		[32mconst updatedTodo = new TodoEntity(1, 'Test Todo', true);[m
+[32m+[m
+[32m+[m		[32mrepository.getById.mockResolvedValue(previousTodo);[m
+[32m+[m		[32mrepository.update.mockResolvedValue(updatedTodo);[m
+[32m+[m
+[32m+[m		[32mawait updateTodoUseCase.execute(updateData);[m
+[32m+[m
+[32m+[m		[32mexpect(observer.update).toHaveBeenCalledTimes(1);[m
+[32m+[m		[32mexpect(observer.update).toHaveBeenCalledWith(updatedTodo);[m
+[32m+[m	[32m});[m
+[32m+[m
+[32m+[m	[32mtest('should not notify observers when todo remains incomplete', async () => {[m
+[32m+[m		[32mconst updateData = UpdateTodoDto.create({[m
+[32m+[m			[32mid: 1,[m
+[32m+[m			[32mtext: 'Updated text'[m
+[32m+[m		[32m});[m
+[32m+[m
+[32m+[m		[32mconst previousTodo = new TodoEntity(1, 'Test Todo', false);[m
+[32m+[m		[32mconst updatedTodo = new TodoEntity(1, 'Updated text', false);[m
+[32m+[m
+[32m+[m		[32mrepository.getById.mockResolvedValue(previousTodo);[m
+[32m+[m		[32mrepository.update.mockResolvedValue(updatedTodo);[m
+[32m+[m
+[32m+[m		[32mawait updateTodoUseCase.execute(updateData);[m
+[32m+[m
+[32m+[m		[32mexpect(observer.update).not.toHaveBeenCalled();[m
+[32m+[m	[32m});[m
+[32m+[m
+[32m+[m	[32mtest('should not notify observers when todo was already completed', async () => {[m
+[32m+[m		[32mconst updateData = UpdateTodoDto.create({[m
+[32m+[m			[32mid: 1,[m
+[32m+[m			[32misCompleted: true[m
+[32m+[m		[32m});[m
+[32m+[m
+[32m+[m		[32mconst previousTodo = new TodoEntity(1, 'Test Todo', true);[m
+[32m+[m		[32mconst updatedTodo = new TodoEntity(1, 'Test Todo', true);[m
+[32m+[m
+[32m+[m		[32mrepository.getById.mockResolvedValue(previousTodo);[m
+[32m+[m		[32mrepository.update.mockResolvedValue(updatedTodo);[m
+[32m+[m
+[32m+[m		[32mawait updateTodoUseCase.execute(updateData);[m
+[32m+[m
+[32m+[m		[32mexpect(observer.update).not.toHaveBeenCalled();[m
+[32m+[m	[32m});[m
+[32m+[m
+[32m+[m	[32mtest('should not notify observers when todo changes from completed to incomplete', async () => {[m
+[32m+[m		[32mconst updateData = UpdateTodoDto.create({[m
+[32m+[m			[32mid: 1,[m
+[32m+[m			[32misCompleted: false[m
+[32m+[m		[32m});[m
+[32m+[m
+[32m+[m		[32mconst previousTodo = new TodoEntity(1, 'Test Todo', true);[m
+[32m+[m		[32mconst updatedTodo = new TodoEntity(1, 'Test Todo', false);[m
+[32m+[m
+[32m+[m		[32mrepository.getById.mockResolvedValue(previousTodo);[m
+[32m+[m		[32mrepository.update.mockResolvedValue(updatedTodo);[m
+[32m+[m
+[32m+[m		[32mawait updateTodoUseCase.execute(updateData);[m
+[32m+[m
+[32m+[m		[32mexpect(observer.update).not.toHaveBeenCalled();[m
+[32m+[m	[32m});[m
+[32m+[m
+ 	test('should throw an error if repository.update fails', async () => {[m
+[31m-		const updateData = UpdateTodoDto.create({ id: 1, text: 'Test Todo updated' });[m
+[32m+[m		[32mconst updateData = UpdateTodoDto.create({[m
+[32m+[m			[32mid: 1,[m
+[32m+[m			[32mtext: 'Test Todo updated'[m
+[32m+[m		[32m});[m
+[32m+[m
+[32m+[m		[32mconst previousTodo = new TodoEntity(1, 'Test Todo', false);[m
+ 		const error = new Error('Repository update failed');[m
+ [m
+[32m+[m		[32mrepository.getById.mockResolvedValue(previousTodo);[m
+ 		repository.update.mockRejectedValue(error);[m
+ [m
+ 		await expect(updateTodoUseCase.execute(updateData)).rejects.toThrow(error);[m
+ 	});[m
+[31m-});[m
+[32m+[m[32m});[m
+\ No newline at end of file[m
+[1mdiff --git a/src/features/todos/domain/usecases/update.usecase.ts b/src/features/todos/domain/usecases/update.usecase.ts[m
+[1mindex 751dd01..74aa204 100644[m
+[1m--- a/src/features/todos/domain/usecases/update.usecase.ts[m
+[1m+++ b/src/features/todos/domain/usecases/update.usecase.ts[m
+[36m@@ -1,5 +1,6 @@[m
+[31m-import { type UpdateTodoDto } from '../dtos';[m
+[32m+[m[32mimport { GetTodoByIdDto, type UpdateTodoDto } from '../dtos';[m
+ import { type TodoEntity } from '../entities';[m
+[32m+[m[32mimport { type TodoCompletedEvent } from '../observers';[m
+ import { type TodoRepository } from '../repositories/respository';[m
+ [m
+ export interface UpdateTodoUseCase {[m
+[36m@@ -7,9 +8,24 @@[m [mexport interface UpdateTodoUseCase {[m
+ }[m
+ [m
+ export class UpdateTodo implements UpdateTodoUseCase {[m
+[31m-	constructor(private readonly repository: TodoRepository) {}[m
+[32m+[m	[32mconstructor([m
+[32m+[m		[32mprivate readonly repository: TodoRepository,[m
+[32m+[m		[32mprivate readonly todoCompletedEvent: TodoCompletedEvent[m
+[32m+[m	[32m) {}[m
+ [m
+ 	async execute(data: UpdateTodoDto): Promise<TodoEntity> {[m
+[31m-		return await this.repository.update(data);[m
+[32m+[m		[32mconst getTodoByIdDto = GetTodoByIdDto.create({ id: data.id });[m
+[32m+[m		[32mconst previousTodo = await this.repository.getById(getTodoByIdDto);[m
+[32m+[m
+[32m+[m		[32mconst updatedTodo = await this.repository.update(data);[m
+[32m+[m
+[32m+[m		[32mconst wasCompleted = previousTodo.isCompleted;[m
+[32m+[m		[32mconst isCompleted = updatedTodo.isCompleted;[m
+[32m+[m
+[32m+[m		[32mif (!wasCompleted && isCompleted) {[m
+[32m+[m			[32mthis.todoCompletedEvent.notify(updatedTodo);[m
+[32m+[m		[32m}[m
+[32m+[m
+[32m+[m		[32mreturn updatedTodo;[m
+ 	}[m
+[31m-}[m
+[32m+[m[32m}[m
+\ No newline at end of file[m
+[1mdiff --git a/src/features/todos/infraestructure/index.ts b/src/features/todos/infraestructure/index.ts[m
+[1mindex c248c22..c928bda 100644[m
+[1m--- a/src/features/todos/infraestructure/index.ts[m
+[1m+++ b/src/features/todos/infraestructure/index.ts[m
+[36m@@ -1,2 +1,3 @@[m
+ export * from './local.datasource.impl';[m
+ export * from './repository.impl';[m
+[32m+[m[32mexport * from './observers';[m
+\ No newline at end of file[m
+[1mdiff --git a/src/features/todos/presentation/controller.ts b/src/features/todos/presentation/controller.ts[m
+[1mindex 222a2d0..29f043b 100644[m
+[1m--- a/src/features/todos/presentation/controller.ts[m
+[1m+++ b/src/features/todos/presentation/controller.ts[m
+[36m@@ -15,7 +15,8 @@[m [mimport {[m
+ 	UpdateTodoDto,[m
+ 	GetTodos,[m
+ 	type TodoEntity,[m
+[31m-	type TodoRepository[m
+[32m+[m	[32mtype TodoRepository,[m
+[32m+[m	[32mtype TodoCompletedEvent[m
+ } from '../domain';[m
+ [m
+ interface Params {[m
+[36m@@ -34,7 +35,10 @@[m [minterface RequestQuery {[m
+ [m
+ export class TodoController {[m
+ 	//* Dependency injection[m
+[31m-	constructor(private readonly repository: TodoRepository) {}[m
+[32m+[m	[32mconstructor([m
+[32m+[m		[32mprivate readonly repository: TodoRepository,[m
+[32m+[m		[32mprivate readonly todoCompletedEvent: TodoCompletedEvent[m
+[32m+[m	[32m) { }[m
+ [m
+ 	public getAll = ([m
+ 		req: Request<unknown, unknown, unknown, RequestQuery>,[m
+[36m@@ -81,7 +85,7 @@[m [mexport class TodoController {[m
+ 		const { id } = req.params;[m
+ 		const { text, isCompleted } = req.body;[m
+ 		const updateDto = UpdateTodoDto.create({ id: Number(id), text, isCompleted });[m
+[31m-		new UpdateTodo(this.repository)[m
+[32m+[m		[32mnew UpdateTodo(this.repository, this.todoCompletedEvent)[m
+ 			.execute(updateDto)[m
+ 			.then((result) => res.json({ data: result }))[m
+ 			.catch(next);[m
+[1mdiff --git a/src/features/todos/presentation/routes.ts b/src/features/todos/presentation/routes.ts[m
+[1mindex 2203e5b..4d1935f 100644[m
+[1m--- a/src/features/todos/presentation/routes.ts[m
+[1m+++ b/src/features/todos/presentation/routes.ts[m
+[36m@@ -2,9 +2,10 @@[m
+ [m
+ import { Router } from 'express';[m
+ [m
+[31m-import { TodoDatasourceImpl, TodoRepositoryImpl } from '../infraestructure';[m
+[32m+[m[32mimport { TodoDatasourceImpl, TodoRepositoryImpl, TodoCompletedLogger, TodoCompletedNotifier } from '../infraestructure';[m
+ import { TodoController } from './controller';[m
+ import { AuthDatasourceImpl, AuthMiddleware, AuthRepositoryImpl } from '../../auth';[m
+[32m+[m[32mimport { TodoCompletedEvent } from '../domain';[m
+ [m
+ export class TodoRoutes {[m
+ 	static get routes(): Router {[m
+[36m@@ -13,7 +14,13 @@[m [mexport class TodoRoutes {[m
+ 		//* This datasource can be change[m
+ 		const datasource = new TodoDatasourceImpl();[m
+ 		const repository = new TodoRepositoryImpl(datasource);[m
+[31m-		const controller = new TodoController(repository);[m
+[32m+[m
+[32m+[m		[32mconst todoCompletedEvent = new TodoCompletedEvent();[m
+[32m+[m
+[32m+[m		[32mtodoCompletedEvent.subscribe(new TodoCompletedLogger());[m
+[32m+[m		[32mtodoCompletedEvent.subscribe(new TodoCompletedNotifier());[m
+[32m+[m
+[32m+[m		[32mconst controller = new TodoController(repository, todoCompletedEvent);[m
+ [m
+ 		// * Authentication middleware[m
+ 		const authDatasource = new AuthDatasourceImpl();[m
